@@ -1,0 +1,171 @@
+%function result = read_display_out()
+
+%interpolates the given target variables to the variable "new_grid" and
+%displays them as color plots
+
+% modules_path = 'modules';
+% addpath(genpath(modules_path));
+% 
+result_path = 'results/';
+run_number = 'NyA_latWater_latHeat_silt_5m_Cc05_1880_2100';
+addpath(genpath(result_path));
+
+AL_1935_2100 = [];
+WaterIce_AL_1935_2100 = [];
+WaterIce_AL_1935_2100_cell = [];
+WaterIce_SegIce_1935_2100 = [];
+WaterIce_SegIce_1935_2100_cell = [];
+Saturation_1935_2100 = [];
+
+for year = 1881 : 2100
+
+disp(year)
+
+out_timestamp = [num2str(year) '0901'];
+load([result_path run_number '/' run_number '_' out_timestamp '.mat'])
+
+%define the grid to which variables are interpolated
+target_cell_size = 0.02;
+new_grid = 22 + [-22:target_cell_size:0]';
+%new_grid = [15:target_cell_size:21]';
+threshold = target_cell_size/10;  
+
+%define target variables
+result.T = [];
+result.waterIce =[];
+% result.water = [];
+% result.ice = [];
+% result.Xice = [];
+% result.Xwater = [];
+% result.XwaterIce = [];
+result.saturation = [];
+% result.waterPotential = [];
+% result.saltConc = [];
+% result.salt_c_brine=[];
+% result.class_number = [];
+%must all have the same dimensions in all fields
+
+variableList = fieldnames(result);
+numberOfVariables = size(variableList,1);
+
+
+%for i=1:size(out.STRATIGRAPHY,2)
+for i=1392
+    
+    altitudeLowestCell = out.STRATIGRAPHY{1,i}{end,1}.STATVAR.lowerPos;
+    
+    
+    %read out and accumulate over all classes
+    
+    layerThick=[];
+    area=[];
+    
+    for j=1:size(out.STRATIGRAPHY{1,i},1)
+        layerThick=[layerThick; out.STRATIGRAPHY{1,i}{j,1}.STATVAR.layerThick];
+        area=[area; out.STRATIGRAPHY{1,i}{j,1}.STATVAR.area];
+    end
+    layerThick_temp = layerThick;
+    layerThick = zeros(size(layerThick,1).*2, 1).* NaN;
+    layerThick(1:2:size(layerThick,1),1) = threshold;
+    layerThick(2:2:size(layerThick,1),1) = layerThick_temp - threshold;
+    
+    area_temp = area;
+    area=[area; area].* NaN;
+    area(1:2:size(layerThick,1),1) = area_temp;
+    area(2:2:size(layerThick,1),1) = area_temp;
+    
+    %     depths = [0; cumsum(layerThick)];
+    %     depths = -(depths-depths(end,1));
+    %     depths = (depths(1:end-1,1)+depths(2:end,1))./2 + altitudeLowestCell;
+    
+    
+    temp=repmat(NaN, size(layerThick_temp,1), numberOfVariables);
+    pos=1;
+    for j = 1:size(out.STRATIGRAPHY{1,i},1)
+        fieldLength = size(out.STRATIGRAPHY{1,i}{j,1}.STATVAR.layerThick,1);
+        for k=1:numberOfVariables-1
+            if any(strcmp(fieldnames(out.STRATIGRAPHY{1,i}{j,1}.STATVAR), variableList{k,1}))
+                temp(pos:pos+fieldLength-1,k) = out.STRATIGRAPHY{1,i}{j,1}.STATVAR.(variableList{k,1});
+            end
+        end
+        temp(pos:pos+fieldLength-1,numberOfVariables) = zeros(fieldLength,1) + size(out.STRATIGRAPHY{1,i},1)+1-j; %assigna class number starting with 1 from the bottom
+        pos = pos+fieldLength;
+    end
+    
+    %compute targate variables
+    for k=1:numberOfVariables
+        if strcmp(variableList{k,1}, 'saltConc')
+            pos_waterIce = find(strcmp(variableList, 'waterIce'));
+            temp(:,k) = temp(:,k)./ (temp(:,pos_waterIce) ./layerThick_temp./area_temp);  %divide by total water content
+        end
+    end
+    
+    for k=1:numberOfVariables
+        if strcmp(variableList{k,1}, 'water') || strcmp(variableList{k,1}, 'ice') || strcmp(variableList{k,1}, 'waterIce') || strcmp(variableList{k,1}, 'XwaterIce') || strcmp(variableList{k,1}, 'Xwater') || strcmp(variableList{k,1}, 'Xice') || strcmp(variableList{k,1}, 'saltConc')
+            temp(:,k) = temp(:,k)./layerThick_temp./area_temp;
+        end
+        %result.(variableList{k,1}) = [result.(variableList{k,1}) interp1(depths, temp(:,k), new_grid)];
+    end
+    
+    temp_temp = temp;
+    temp=[temp; temp].* NaN;
+    temp(1:2:size(layerThick,1),:) = temp_temp;
+    temp(2:2:size(layerThick,1),:) = temp_temp;
+    
+    %interpolate to new grid    
+    depths = cumsum(layerThick);
+    depths = depths - threshold/2;
+    depths(1) = 0;
+    depths = -(depths-depths(end,1));
+    depths = depths + altitudeLowestCell;
+
+    for k=1:numberOfVariables
+        result.(variableList{k,1}) = [result.(variableList{k,1}) interp1(depths, temp(:,k), new_grid, 'nearest')];
+    end
+    
+end
+
+%for i = 1 : size(result.T,2)
+    i = 1; % 15. August
+    active_layer = new_grid(1,1);
+    for j = 751 : size(result.T,1)
+        if result.T(j,i) > 0
+            active_layer = new_grid(j,1);
+            j_AL = j;
+            break
+        elseif result.T(j,i) <= 0
+            active_layer = new_grid(j,1);
+            j_AL = j;
+        end
+    end
+    if active_layer > 15
+        AL_1935_2100 = [AL_1935_2100,active_layer];
+        WaterIce_AL_1935_2100 = [WaterIce_AL_1935_2100,min(result.waterIce((j_AL:j_AL+10),i))];
+        id = find(result.waterIce((j_AL:j_AL+10),i) == min(result.waterIce((j_AL:j_AL+10),i)));
+        %WaterIce_AL_1935_2100_cell = [WaterIce_AL_1935_2100_cell,id]; clear id
+        WaterIce_SegIce_1935_2100 = [WaterIce_SegIce_1935_2100,max(result.waterIce((j_AL-10:j_AL-1),1))];
+        id = find(result.waterIce((j_AL-10:j_AL-1),1) == max(result.waterIce((j_AL-10:j_AL-1),1)));
+        %WaterIce_SegIce_1935_2100_cell = [WaterIce_SegIce_1935_2100_cell,id]; clear id
+        Saturation_1935_2100 = [Saturation_1935_2100,result.saturation(j_AL+1,i)];
+    else
+        disp('No value for year')
+    end
+    
+%end
+
+clearvars -except result_path run_number AL_1935_2100 WaterIce_AL_1935_2100 WaterIce_AL_1935_2100_cell WaterIce_SegIce_1935_2100 WaterIce_SegIce_1935_2100_cell Saturation_1935_2100
+
+end
+
+%plot
+% for i=1:numberOfVariables
+%     figure
+%     imagesc(out.TIMESTAMP, new_grid, result.(variableList{i,1}))
+%     hold on
+%     plot(out.TIMESTAMP,active_layer,'black')
+%     plot([out.TIMESTAMP(1392),out.TIMESTAMP(1392)],[0,22],'red')
+%     axis xy
+%     datetick
+%     title(variableList{i,1})
+%     colorbar
+% end

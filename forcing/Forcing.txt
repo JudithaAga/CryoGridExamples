@@ -1,0 +1,8 @@
+Ny_Alesund_T0_CCSM_rcp8_5_1979_2100
+Original forcing Moritz
+
+Ny_Alesund_T0_CCSM_rcp8_5_1889_2100
+Forcing Moritz with repeated years 1979-1989 since 1989
+
+Ny_Alesund_T0_CCSM_rcp8_5_1935_2100
+Forcing Moritz with repeated years 1980-1985 since 1835
